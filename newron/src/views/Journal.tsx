@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BookOpen, Plus, Sparkles, Send, Trash2, Tag, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { summariseJournal } from '../lib/openai';
+import { summariseJournal } from '../lib/ai';
 import type { JournalEntry } from '../types';
 
 const MOOD_EMOJIS: Record<number, string> = {

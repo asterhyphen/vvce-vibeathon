@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, User, Heart, Lightbulb, Mic, RotateCcw } from 'lucide-react';
 import type { ChatMessage, DriftLevel } from '../types';
 import { ventResponses, guidanceResponses } from '../data/mockData';
-import { getChatResponse } from '../lib/openai';
+import { getChatResponse } from '../lib/ai';
 import { DriftBadge } from '../components/DriftBadge';
 
 interface Props {

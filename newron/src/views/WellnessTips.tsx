@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, RefreshCw, Sparkles, ExternalLink } from 'lucide-react';
 import { wellnessTips } from '../data/mockData';
-import { getWellnessTip } from '../lib/openai';
+import { getWellnessTip } from '../lib/ai';
 import type { DriftLevel } from '../types';
 
 interface Props {
@@ -21,7 +21,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Grounding: '#38bdf8',
 };
 
-export const WellnessTips: React.FC<Props> = ({ score, level, recentMood }) => {
+export const WellnessTips: React.FC<Props> = ({ score, recentMood }) => {
   const [aiTip, setAiTip] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
