@@ -63,63 +63,26 @@ export const Dashboard: React.FC<Props> = ({
     ? <Minus className="w-4 h-4 text-amber-400" />
     : <TrendingDown className="w-4 h-4 text-emerald-400" />;
 
-  const getTypingStatus = () => {
-    if (signals.typingSpeed < 1.5) return 'bad';
-    if (signals.typingSpeed < 2.5) return 'warn';
-    return 'good';
-  };
-
-  const getBackspaceStatus = () => {
-    if (signals.backspaceRate > 30) return 'bad';
-    if (signals.backspaceRate > 15) return 'warn';
-    return 'good';
-  };
-
-  const getSentimentStatus = () => {
-    if (signals.sentimentScore < -0.2) return 'bad';
-    if (signals.sentimentScore < 0.1) return 'warn';
-    return 'good';
-  };
-
-  const getPauseStatus = () => {
-    if (signals.pauseDuration > 1500) return 'bad';
-    if (signals.pauseDuration > 700) return 'warn';
-    return 'good';
-  };
-
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Crisis Banner */}
       {showCrisis && (
-        <CrisisBanner
-          onDismiss={() => setShowCrisis(false)}
-          onChat={onOpenChat}
-        />
+        <CrisisBanner onDismiss={() => setShowCrisis(false)} onChat={onOpenChat} />
       )}
 
-      {/* Subtle alert */}
       {alertMessage && !showCrisis && (
         <div className="animate-fade-in flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
           <Activity className="w-4 h-4 text-amber-400 flex-shrink-0" />
           <p className="text-sm text-amber-300">{alertMessage}</p>
-          <button
-            onClick={() => setAlertMessage(null)}
-            className="ml-auto text-slate-500 hover:text-slate-300 text-xs"
-          >
-            ✕
-          </button>
+          <button onClick={() => setAlertMessage(null)} className="ml-auto text-slate-500 hover:text-slate-300 text-xs">✕</button>
         </div>
       )}
 
       {/* Main score card */}
       <div className="glass rounded-2xl p-6">
         <div className="flex flex-col sm:flex-row items-center gap-6">
-          {/* Drift Ring */}
           <div className="flex-shrink-0">
-            <DriftRing score={score} level={level} size={160} isAnalyzing={isAnalyzing} />
+            <DriftRing score={score} size={160} isAnalyzing={isAnalyzing} />
           </div>
-
-          {/* Info */}
           <div className="flex-1 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
               <Brain className="w-5 h-5 text-violet-400" />
@@ -137,25 +100,20 @@ export const Dashboard: React.FC<Props> = ({
               {level === 'declining' && 'Some early warning signs detected. Small changes now can prevent escalation.'}
               {level === 'critical' && 'Significant distress signals detected. Please reach out for support — you deserve care.'}
             </p>
-
             <div className="flex flex-wrap gap-2 mt-4 justify-center sm:justify-start">
               {level !== 'stable' && (
-                <button
-                  onClick={onOpenChat}
-                  className="px-4 py-2 rounded-xl bg-violet-600/80 hover:bg-violet-600 text-white text-sm font-medium transition-all hover:scale-105"
-                >
+                <button onClick={onOpenChat}
+                  className="px-4 py-2 rounded-xl bg-violet-600/80 hover:bg-violet-600 text-white text-sm font-medium transition-all hover:scale-105">
                   Talk to AI Support
                 </button>
               )}
               {(level === 'declining' || level === 'critical') && (
-                <button
-                  onClick={onOpenAppointments}
+                <button onClick={onOpenAppointments}
                   className={`px-4 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 ${
                     level === 'critical'
                       ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300'
                       : 'bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 text-slate-300'
-                  }`}
-                >
+                  }`}>
                   {level === 'critical' ? '⚡ Priority Appointment' : 'Book Appointment'}
                 </button>
               )}
@@ -194,32 +152,29 @@ export const Dashboard: React.FC<Props> = ({
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <SignalCard
-            label="Typing Speed"
-            value={`${signals.typingSpeed.toFixed(1)} c/s`}
+            label="Typing Speed" value={`${signals.typingSpeed.toFixed(1)} c/s`}
             icon={<Zap className="w-3.5 h-3.5" />}
-            status={getTypingStatus()}
+            status={signals.typingSpeed < 1.5 ? 'bad' : signals.typingSpeed < 2.5 ? 'warn' : 'good'}
           />
           <SignalCard
-            label="Backspace Rate"
-            value={`${signals.backspaceRate.toFixed(0)}%`}
+            label="Backspace Rate" value={`${signals.backspaceRate.toFixed(0)}%`}
             icon={<Activity className="w-3.5 h-3.5" />}
-            status={getBackspaceStatus()}
+            status={signals.backspaceRate > 30 ? 'bad' : signals.backspaceRate > 15 ? 'warn' : 'good'}
           />
           <SignalCard
-            label="Avg Pause"
-            value={`${(signals.pauseDuration / 1000).toFixed(1)}s`}
+            label="Avg Pause" value={`${(signals.pauseDuration / 1000).toFixed(1)}s`}
             icon={<Clock className="w-3.5 h-3.5" />}
-            status={getPauseStatus()}
+            status={signals.pauseDuration > 1500 ? 'bad' : signals.pauseDuration > 700 ? 'warn' : 'good'}
           />
           <SignalCard
             label="Sentiment"
             value={signals.sentimentScore > 0.2 ? 'Positive' : signals.sentimentScore < -0.1 ? 'Negative' : 'Neutral'}
             icon={<Brain className="w-3.5 h-3.5" />}
-            status={getSentimentStatus()}
+            status={signals.sentimentScore < -0.2 ? 'bad' : signals.sentimentScore < 0.1 ? 'warn' : 'good'}
           />
         </div>
         <p className="text-xs text-slate-600 mt-3 text-center">
-          Signals update in real-time as you type in the chat interface
+          Signals update in real-time as you type in the AI chat
         </p>
       </div>
     </div>
