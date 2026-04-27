@@ -92,7 +92,7 @@ export const WellnessTips: React.FC<Props> = ({ score, recentMood }) => {
             <p className="text-sm text-slate-200 leading-relaxed">{aiTip}</p>
             <p className="text-xs text-violet-400 mt-2 flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
-              {import.meta.env.VITE_OPENAI_API_KEY ? 'AI-generated for your current state' : 'Personalised suggestion'}
+              {import.meta.env.VITE_GEMINI_API_KEY ? 'AI-generated for your current state' : 'Personalised suggestion'}
             </p>
           </div>
         ) : (

@@ -4,7 +4,9 @@ import { DriftRing } from '../components/DriftRing';
 import { DriftBadge } from '../components/DriftBadge';
 import { TrendChart } from '../components/TrendChart';
 import { CrisisBanner } from '../components/CrisisBanner';
+import { AIInsightCard } from '../components/AIInsightCard';
 import type { DriftLevel, DriftDataPoint, BehavioralSignal } from '../types';
+import { useAppContext } from '../context/AppContext';
 
 interface Props {
   score: number;
@@ -16,167 +18,185 @@ interface Props {
   onOpenAppointments: () => void;
 }
 
-const SignalCard: React.FC<{ label: string; value: string; icon: React.ReactNode; status: 'good' | 'warn' | 'bad' }> = ({
-  label, value, icon, status,
-}) => {
+const Card: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
+  <div style={{
+    background: 'var(--surface)', border: '1px solid var(--border)',
+    borderRadius: 16, padding: 20, ...style,
+  }}>
+    {children}
+  </div>
+);
+
+const SectionTitle: React.FC<{ icon: React.ReactNode; title: string; right?: React.ReactNode }> = ({ icon, title, right }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+    <span style={{ color: 'var(--accent)', display: 'flex' }}>{icon}</span>
+    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{title}</span>
+    {right && <div style={{ marginLeft: 'auto' }}>{right}</div>}
+  </div>
+);
+
+const SignalCard: React.FC<{ label: string; value: string; icon: React.ReactNode; status: 'good' | 'warn' | 'bad' }> = ({ label, value, icon, status }) => {
   const colors = {
-    good: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    warn: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    bad: 'text-red-400 bg-red-500/10 border-red-500/20',
+    good: { text: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)' },
+    warn: { text: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)' },
+    bad:  { text: '#ef4444', bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.2)' },
   };
+  const c = colors[status];
   return (
-    <div className={`glass rounded-xl p-3 border ${colors[status]} transition-all duration-500`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="opacity-70">{icon}</span>
-        <span className="text-xs text-slate-400">{label}</span>
+    <div style={{
+      background: c.bg, border: `1px solid ${c.border}`,
+      borderRadius: 12, padding: '12px 14px',
+      transition: 'all 0.4s ease',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span style={{ color: c.text, opacity: 0.8, display: 'flex' }}>{icon}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{label}</span>
       </div>
-      <p className="text-sm font-semibold">{value}</p>
+      <p style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{value}</p>
     </div>
   );
 };
 
-export const Dashboard: React.FC<Props> = ({
-  score, level, trend, signals, isAnalyzing, onOpenChat, onOpenAppointments,
-}) => {
+export const Dashboard: React.FC<Props> = ({ score, level, trend, signals, isAnalyzing, onOpenChat, onOpenAppointments }) => {
+  const { moodLog, journals } = useAppContext();
   const [showCrisis, setShowCrisis] = useState(false);
-  const [prevLevel, setPrevLevel] = useState<DriftLevel>(level);
-  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [prevLevel, setPrevLevel]   = useState<DriftLevel>(level);
+  const [alert, setAlert]           = useState<string | null>(null);
 
   useEffect(() => {
-    if (level !== prevLevel) {
-      if (level === 'critical') {
-        setShowCrisis(true);
-        setAlertMessage(null);
-      } else if (level === 'declining' && prevLevel === 'stable') {
-        setAlertMessage('Your mental state is showing early signs of decline. Consider taking a break.');
-      } else if (level === 'stable' && prevLevel !== 'stable') {
-        setAlertMessage(null);
-        setShowCrisis(false);
-      }
-      setPrevLevel(level);
-    }
+    if (level === prevLevel) return;
+    if (level === 'critical') { setShowCrisis(true); setAlert(null); }
+    else if (level === 'declining' && prevLevel === 'stable') setAlert('Early warning signs detected. Consider taking a break.');
+    else if (level === 'stable' && prevLevel !== 'stable') { setAlert(null); setShowCrisis(false); }
+    setPrevLevel(level);
   }, [level, prevLevel]);
 
   const trendIcon = score > 50
-    ? <TrendingUp className="w-4 h-4 text-red-400" />
+    ? <TrendingUp  style={{ width: 14, height: 14, color: '#ef4444' }} />
     : score > 25
-    ? <Minus className="w-4 h-4 text-amber-400" />
-    : <TrendingDown className="w-4 h-4 text-emerald-400" />;
+    ? <Minus       style={{ width: 14, height: 14, color: '#f59e0b' }} />
+    : <TrendingDown style={{ width: 14, height: 14, color: '#10b981' }} />;
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      {showCrisis && (
-        <CrisisBanner onDismiss={() => setShowCrisis(false)} onChat={onOpenChat} />
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="animate-fade-in">
 
-      {alertMessage && !showCrisis && (
-        <div className="animate-fade-in flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
-          <Activity className="w-4 h-4 text-amber-400 flex-shrink-0" />
-          <p className="text-sm text-amber-300">{alertMessage}</p>
-          <button onClick={() => setAlertMessage(null)} className="ml-auto text-slate-500 hover:text-slate-300 text-xs">✕</button>
+      {showCrisis && <CrisisBanner onDismiss={() => setShowCrisis(false)} onChat={onOpenChat} />}
+
+      {alert && !showCrisis && (
+        <div className="animate-fade-in" style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 14px', borderRadius: 12,
+          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
+        }}>
+          <Activity style={{ width: 14, height: 14, color: '#f59e0b', flexShrink: 0 }} />
+          <p style={{ fontSize: 13, color: '#fcd34d', flex: 1 }}>{alert}</p>
+          <button onClick={() => setAlert(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 14 }}>✕</button>
         </div>
       )}
 
-      {/* Main score card */}
-      <div className="glass rounded-2xl p-6">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="flex-shrink-0">
-            <DriftRing score={score} size={160} isAnalyzing={isAnalyzing} />
-          </div>
-          <div className="flex-1 text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
-              <Brain className="w-5 h-5 text-violet-400" />
-              <h2 className="text-lg font-semibold text-slate-100">Mental State Overview</h2>
+      {/* Score card */}
+      <Card>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+          <DriftRing score={score} size={156} isAnalyzing={isAnalyzing} />
+
+          <div style={{ textAlign: 'center', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+              <Brain style={{ width: 16, height: 16, color: 'var(--accent)' }} />
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>Mental State Overview</span>
             </div>
-            <div className="flex items-center justify-center sm:justify-start gap-2 mb-3">
-              <DriftBadge level={level} size="lg" />
-              <span className="flex items-center gap-1 text-sm text-slate-400">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 }}>
+              <DriftBadge level={level} size="md" />
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-2)' }}>
                 {trendIcon}
                 {score > 50 ? 'Trending up' : score > 25 ? 'Holding steady' : 'Trending well'}
               </span>
             </div>
-            <p className="text-sm text-slate-400 leading-relaxed max-w-sm">
-              {level === 'stable' && 'Your behavioral patterns look healthy. Keep maintaining your current routine.'}
-              {level === 'declining' && 'Some early warning signs detected. Small changes now can prevent escalation.'}
+            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, maxWidth: 340, margin: '0 auto 16px' }}>
+              {level === 'stable'   && 'Your behavioral patterns look healthy. Keep maintaining your current routine.'}
+              {level === 'declining'&& 'Some early warning signs detected. Small changes now can prevent escalation.'}
               {level === 'critical' && 'Significant distress signals detected. Please reach out for support — you deserve care.'}
             </p>
-            <div className="flex flex-wrap gap-2 mt-4 justify-center sm:justify-start">
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
               {level !== 'stable' && (
-                <button onClick={onOpenChat}
-                  className="px-4 py-2 rounded-xl bg-violet-600/80 hover:bg-violet-600 text-white text-sm font-medium transition-all hover:scale-105">
+                <button onClick={onOpenChat} className="btn-primary" style={{ fontSize: 13 }}>
                   Talk to AI Support
                 </button>
               )}
               {(level === 'declining' || level === 'critical') && (
-                <button onClick={onOpenAppointments}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all hover:scale-105 ${
-                    level === 'critical'
-                      ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300'
-                      : 'bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 text-slate-300'
-                  }`}>
+                <button onClick={onOpenAppointments} className="btn-ghost" style={{
+                  fontSize: 13,
+                  ...(level === 'critical' ? {
+                    background: 'rgba(239,68,68,0.1)',
+                    borderColor: 'rgba(239,68,68,0.3)',
+                    color: '#fca5a5',
+                  } : {}),
+                }}>
                   {level === 'critical' ? '⚡ Priority Appointment' : 'Book Appointment'}
                 </button>
               )}
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* 7-day trend */}
-      <div className="glass rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-violet-400" />
-            <h3 className="font-medium text-slate-200">7-Day Drift Trend</h3>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-emerald-400 inline-block rounded" /> Stable</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-amber-400 inline-block rounded" /> Declining</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-0.5 bg-red-400 inline-block rounded" /> Critical</span>
-          </div>
-        </div>
-        <TrendChart data={trend} level={level} height={200} />
-      </div>
+      {/* Trend */}
+      <Card>
+        <SectionTitle
+          icon={<TrendingUp style={{ width: 15, height: 15 }} />}
+          title="7-Day Drift Trend"
+          right={
+            <div style={{ display: 'flex', gap: 12 }}>
+              {[['#10b981','Stable'],['#f59e0b','Declining'],['#ef4444','Critical']].map(([c,l]) => (
+                <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-3)' }}>
+                  <span style={{ width: 16, height: 2, background: c, borderRadius: 99, display: 'inline-block' }} />
+                  {l}
+                </span>
+              ))}
+            </div>
+          }
+        />
+        <TrendChart data={trend} level={level} height={190} />
+      </Card>
 
-      {/* Behavioral signals */}
-      <div className="glass rounded-2xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Eye className="w-4 h-4 text-violet-400" />
-          <h3 className="font-medium text-slate-200">Passive Behavioral Signals</h3>
-          {isAnalyzing && (
-            <span className="ml-auto text-xs text-violet-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+      {/* AI Daily Insight */}
+      <AIInsightCard
+        driftScore={score}
+        moodAvg={moodLog.length ? moodLog.slice(0, 3).reduce((s, e) => s + e.value, 0) / Math.min(moodLog.length, 3) : 5}
+        journalCount={journals.length}
+        typingStress={null}
+      />
+
+      {/* Signals */}
+      <Card>
+        <SectionTitle
+          icon={<Eye style={{ width: 15, height: 15 }} />}
+          title="Passive Behavioral Signals"
+          right={isAnalyzing && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse-red 1.6s infinite' }} />
               Analyzing
             </span>
           )}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <SignalCard
-            label="Typing Speed" value={`${signals.typingSpeed.toFixed(1)} c/s`}
-            icon={<Zap className="w-3.5 h-3.5" />}
-            status={signals.typingSpeed < 1.5 ? 'bad' : signals.typingSpeed < 2.5 ? 'warn' : 'good'}
-          />
-          <SignalCard
-            label="Backspace Rate" value={`${signals.backspaceRate.toFixed(0)}%`}
-            icon={<Activity className="w-3.5 h-3.5" />}
-            status={signals.backspaceRate > 30 ? 'bad' : signals.backspaceRate > 15 ? 'warn' : 'good'}
-          />
-          <SignalCard
-            label="Avg Pause" value={`${(signals.pauseDuration / 1000).toFixed(1)}s`}
-            icon={<Clock className="w-3.5 h-3.5" />}
-            status={signals.pauseDuration > 1500 ? 'bad' : signals.pauseDuration > 700 ? 'warn' : 'good'}
-          />
-          <SignalCard
-            label="Sentiment"
+        />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+          <SignalCard label="Typing Speed" value={`${signals.typingSpeed.toFixed(1)} c/s`}
+            icon={<Zap style={{ width: 13, height: 13 }} />}
+            status={signals.typingSpeed < 1.5 ? 'bad' : signals.typingSpeed < 2.5 ? 'warn' : 'good'} />
+          <SignalCard label="Backspace Rate" value={`${signals.backspaceRate.toFixed(0)}%`}
+            icon={<Activity style={{ width: 13, height: 13 }} />}
+            status={signals.backspaceRate > 30 ? 'bad' : signals.backspaceRate > 15 ? 'warn' : 'good'} />
+          <SignalCard label="Avg Pause" value={`${(signals.pauseDuration / 1000).toFixed(1)}s`}
+            icon={<Clock style={{ width: 13, height: 13 }} />}
+            status={signals.pauseDuration > 1500 ? 'bad' : signals.pauseDuration > 700 ? 'warn' : 'good'} />
+          <SignalCard label="Sentiment"
             value={signals.sentimentScore > 0.2 ? 'Positive' : signals.sentimentScore < -0.1 ? 'Negative' : 'Neutral'}
-            icon={<Brain className="w-3.5 h-3.5" />}
-            status={signals.sentimentScore < -0.2 ? 'bad' : signals.sentimentScore < 0.1 ? 'warn' : 'good'}
-          />
+            icon={<Brain style={{ width: 13, height: 13 }} />}
+            status={signals.sentimentScore < -0.2 ? 'bad' : signals.sentimentScore < 0.1 ? 'warn' : 'good'} />
         </div>
-        <p className="text-xs text-slate-600 mt-3 text-center">
-          Signals update in real-time as you type in the AI chat
+        <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginTop: 12 }}>
+          Updates in real-time as you type in AI Chat
         </p>
-      </div>
+      </Card>
     </div>
   );
 };

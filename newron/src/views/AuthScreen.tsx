@@ -1,27 +1,58 @@
 import React, { useState, useRef } from 'react';
-import { Brain, Eye, EyeOff, Upload, Sparkles, User } from 'lucide-react';
+import { Brain, Eye, EyeOff, Upload, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 type Mode = 'login' | 'register';
 
+const DEMO = [
+  { label: 'Patient — Critical',  email: 'alex@demo.com',     pw: 'demo123'   },
+  { label: 'Patient — Stable',    email: 'sam@demo.com',      pw: 'demo123'   },
+  { label: 'Psychiatrist',        email: 'dr.chen@demo.com',  pw: 'doctor123' },
+  { label: 'Patient — Declining', email: 'jordan@demo.com',   pw: 'demo123'   },
+];
+
+const Field: React.FC<{
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  min?: string; max?: string;
+  suffix?: React.ReactNode;
+}> = ({ label, type = 'text', value, onChange, placeholder, min, max, suffix }) => (
+  <div>
+    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>{label}</label>
+    <div style={{ position: 'relative' }}>
+      <input
+        type={type} value={value} onChange={e => onChange(e.target.value)}
+        placeholder={placeholder} min={min} max={max}
+        className="input"
+        style={{ paddingRight: suffix ? 40 : undefined }}
+      />
+      {suffix && (
+        <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
+          {suffix}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 export const AuthScreen: React.FC = () => {
   const { login, register } = useAuth();
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode]       = useState<Mode>('login');
   const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Login fields
-  const [email, setEmail] = useState('');
+  const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
-
-  // Register fields
-  const [name, setName] = useState('');
+  const [name, setName]       = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [age, setAge] = useState('');
-  const [avatar, setAvatar] = useState('');
+  const [regPw, setRegPw]     = useState('');
+  const [age, setAge]         = useState('');
+  const [avatar, setAvatar]   = useState('');
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -32,130 +63,118 @@ export const AuthScreen: React.FC = () => {
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const result = login(email, password);
+    e.preventDefault(); setError(''); setLoading(true);
+    await new Promise(r => setTimeout(r, 350));
+    const res = login(email, password);
     setLoading(false);
-    if (!result.success) setError(result.error || 'Login failed');
+    if (!res.success) setError(res.error || 'Login failed');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault(); setError('');
     if (!name.trim()) return setError('Name is required');
-    if (!age || isNaN(Number(age)) || Number(age) < 13 || Number(age) > 120) {
-      return setError('Please enter a valid age (13–120)');
-    }
+    if (!age || isNaN(+age) || +age < 13 || +age > 120) return setError('Enter a valid age (13–120)');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const result = register({ name, email: regEmail, password: regPassword, age: Number(age), avatar });
+    await new Promise(r => setTimeout(r, 350));
+    const res = register({ name, email: regEmail, password: regPw, age: +age, avatar });
     setLoading(false);
-    if (!result.success) setError(result.error || 'Registration failed');
+    if (!res.success) setError(res.error || 'Registration failed');
   };
 
-  return (
-    <div className="min-h-screen bg-[#080a14] flex items-center justify-center px-4">
-      {/* Ambient glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/3 w-96 h-96 rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)', filter: 'blur(60px)' }} />
-        <div className="absolute bottom-0 right-1/3 w-80 h-80 rounded-full opacity-8"
-          style={{ background: 'radial-gradient(circle, #2563eb 0%, transparent 70%)', filter: 'blur(80px)' }} />
-      </div>
+  const eyeBtn = (
+    <button type="button" onClick={() => setShowPass(p => !p)}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
+      {showPass ? <EyeOff style={{ width: 15, height: 15 }} /> : <Eye style={{ width: 15, height: 15 }} />}
+    </button>
+  );
 
-      <div className="relative w-full max-w-sm animate-fade-in">
+  return (
+    <div style={{
+      minHeight: '100svh', background: 'var(--bg)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div style={{ width: '100%', maxWidth: 360 }} className="animate-fade-in">
+
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-600/20 border border-violet-500/30 mb-4">
-            <Brain className="w-7 h-7 text-violet-400" />
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: 16, margin: '0 auto 12px',
+            background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Brain style={{ width: 24, height: 24, color: 'var(--accent)' }} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-100 tracking-tight">newron</h1>
-          <p className="text-slate-400 text-sm mt-1 flex items-center justify-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-            Mental Health Intelligence
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.5px' }}>Newron</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>Mental Health Intelligence</p>
         </div>
 
         {/* Card */}
-        <div className="glass-strong rounded-2xl p-6">
+        <div style={{
+          background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+          borderRadius: 20, padding: 24,
+        }}>
           {/* Tab switcher */}
-          <div className="flex rounded-xl bg-slate-800/50 p-1 mb-6">
+          <div style={{
+            display: 'flex', background: 'var(--surface)', borderRadius: 12,
+            padding: 4, marginBottom: 24, border: '1px solid var(--border)',
+          }}>
             {(['login', 'register'] as Mode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setError(''); }}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                  mode === m
-                    ? 'bg-violet-600/80 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
+              <button key={m} onClick={() => { setMode(m); setError(''); }}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 9, border: 'none',
+                  background: mode === m ? 'var(--accent)' : 'transparent',
+                  color: mode === m ? 'var(--accent-text)' : 'var(--text-2)',
+                  fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}>
                 {m === 'login' ? 'Sign In' : 'Register'}
               </button>
             ))}
           </div>
 
+          {/* Error */}
           {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-300 text-sm animate-fade-in">
+            <div className="animate-fade-in" style={{
+              marginBottom: 16, padding: '10px 14px', borderRadius: 10,
+              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+              color: '#fca5a5', fontSize: 13,
+            }}>
               {error}
             </div>
           )}
 
           {mode === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="alex@demo.com"
-                  required
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPass ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="demo123"
-                    required
-                    className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 pr-10 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors"
-                  />
-                  <button type="button" onClick={() => setShowPass(!showPass)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
-                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium text-sm transition-all hover:scale-[1.02]"
-              >
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="alex@demo.com" />
+              <Field label="Password" type={showPass ? 'text' : 'password'} value={password} onChange={setPassword} placeholder="demo123" suffix={eyeBtn} />
+
+              <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
                 {loading ? 'Signing in…' : 'Sign In'}
               </button>
 
-              {/* Demo hint */}
-              <div className="pt-2 border-t border-slate-700/30">
-                <p className="text-xs text-slate-500 text-center mb-2">Demo accounts</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { label: 'Patient (Critical)', email: 'alex@demo.com', pw: 'demo123' },
-                    { label: 'Patient (Stable)', email: 'sam@demo.com', pw: 'demo123' },
-                    { label: 'Psychiatrist', email: 'dr.chen@demo.com', pw: 'doctor123' },
-                    { label: 'Patient (Declining)', email: 'jordan@demo.com', pw: 'demo123' },
-                  ].map(d => (
-                    <button
-                      key={d.email}
-                      type="button"
+              {/* Demo accounts */}
+              <div style={{ paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', marginBottom: 8 }}>
+                  Demo accounts
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {DEMO.map(d => (
+                    <button key={d.email} type="button"
                       onClick={() => { setEmail(d.email); setPassword(d.pw); }}
-                      className="text-xs px-2 py-1.5 rounded-lg bg-slate-700/40 hover:bg-slate-700/70 text-slate-400 hover:text-slate-200 transition-all text-left"
+                      style={{
+                        padding: '7px 10px', borderRadius: 9, border: '1px solid var(--border)',
+                        background: 'var(--surface)', color: 'var(--text-2)',
+                        fontSize: 11, cursor: 'pointer', textAlign: 'left',
+                        transition: 'all 0.12s ease',
+                      }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)';
+                        (e.currentTarget as HTMLElement).style.color = 'var(--text-1)';
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
+                        (e.currentTarget as HTMLElement).style.color = 'var(--text-2)';
+                      }}
                     >
                       {d.label}
                     </button>
@@ -164,53 +183,35 @@ export const AuthScreen: React.FC = () => {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
-              {/* Avatar upload */}
-              <div className="flex flex-col items-center gap-2">
-                <div
-                  onClick={() => fileRef.current?.click()}
-                  className="w-16 h-16 rounded-full border-2 border-dashed border-slate-600 hover:border-violet-500/60 cursor-pointer flex items-center justify-center overflow-hidden transition-colors"
-                >
+            <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Avatar */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <div onClick={() => fileRef.current?.click()} style={{
+                  width: 64, height: 64, borderRadius: '50%',
+                  border: '2px dashed var(--border-2)',
+                  cursor: 'pointer', overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--surface)',
+                  transition: 'border-color 0.15s ease',
+                }}>
                   {avatar
-                    ? <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
-                    : <User className="w-6 h-6 text-slate-500" />
+                    ? <img src={avatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <User style={{ width: 22, height: 22, color: 'var(--text-3)' }} />
                   }
                 </div>
                 <button type="button" onClick={() => fileRef.current?.click()}
-                  className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300">
-                  <Upload className="w-3 h-3" /> Upload photo
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Upload style={{ width: 12, height: 12 }} /> Upload photo
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarUpload} />
               </div>
 
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Full Name</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" required
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Age</label>
-                <input type="number" value={age} onChange={e => setAge(e.target.value)} placeholder="25" min="13" max="120" required
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Email</label>
-                <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="you@email.com" required
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Password</label>
-                <div className="relative">
-                  <input type={showPass ? 'text' : 'password'} value={regPassword} onChange={e => setRegPassword(e.target.value)} placeholder="Min 6 characters" required minLength={6}
-                    className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2.5 pr-10 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors" />
-                  <button type="button" onClick={() => setShowPass(!showPass)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
-                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <button type="submit" disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium text-sm transition-all hover:scale-[1.02]">
+              <Field label="Full Name" value={name} onChange={setName} placeholder="Your name" />
+              <Field label="Age" type="number" value={age} onChange={setAge} placeholder="25" min="13" max="120" />
+              <Field label="Email" type="email" value={regEmail} onChange={setRegEmail} placeholder="you@email.com" />
+              <Field label="Password" type={showPass ? 'text' : 'password'} value={regPw} onChange={setRegPw} placeholder="Min 6 characters" suffix={eyeBtn} />
+
+              <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
                 {loading ? 'Creating account…' : 'Create Account'}
               </button>
             </form>

@@ -206,5 +206,23 @@ export const useDriftEngine = () => {
     });
   }, []);
 
-  return { ...state, processKeystroke, resetSession };
+  // Inject an external stress score (e.g. from typing test) — blends with current score
+  const injectStress = useCallback((externalScore: number) => {
+    setState(prev => {
+      const blended = Math.round(prev.score * 0.4 + externalScore * 0.6);
+      const clamped = Math.max(0, Math.min(100, blended));
+      const newTrend = [...prev.trend];
+      newTrend[newTrend.length - 1] = { ...newTrend[newTrend.length - 1], score: clamped };
+      return {
+        ...prev,
+        score: clamped,
+        level: getLevelFromScore(clamped),
+        trend: newTrend,
+        isAnalyzing: true,
+      };
+    });
+    setTimeout(() => setState(prev => ({ ...prev, isAnalyzing: false })), 1200);
+  }, []);
+
+  return { ...state, processKeystroke, resetSession, injectStress };
 };
