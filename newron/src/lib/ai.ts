@@ -8,7 +8,7 @@
  *   3. Smart mock fallback — always works, CBT-grounded responses
  */
 
-export const OLLAMA_URL   = (import.meta.env.VITE_OLLAMA_URL   as string | undefined) ?? 'http://localhost:11434';
+export const OLLAMA_URL   = (import.meta.env.VITE_OLLAMA_URL   as string | undefined) ?? '/ollama';
 export const OLLAMA_MODEL = (import.meta.env.VITE_OLLAMA_MODEL as string | undefined) ?? 'mistral';
 const GEMINI_KEY          =  import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
@@ -18,11 +18,15 @@ let _provider: AIProvider | null = null;
 let _lastCheck = 0;
 
 export async function getActiveProvider(): Promise<AIProvider> {
-  if (_provider && Date.now() - _lastCheck < 30_000) return _provider;
+  if (_provider && Date.now() - _lastCheck < 60_000) return _provider;
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(1800) });
+    console.log('[Newron AI] Checking Ollama at:', `${OLLAMA_URL}/api/tags`);
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(45_000) });
+    console.log('[Newron AI] Ollama response status:', res.status);
     if (res.ok) { _provider = 'ollama'; _lastCheck = Date.now(); return 'ollama'; }
-  } catch { /* not running */ }
+  } catch (e) {
+    console.warn('[Newron AI] Ollama not reachable:', (e as Error).message);
+  }
   if (GEMINI_KEY) { _provider = 'gemini'; _lastCheck = Date.now(); return 'gemini'; }
   _provider = 'mock'; _lastCheck = Date.now(); return 'mock';
 }
@@ -104,18 +108,15 @@ export async function ollamaStream(
   onError: (e: Error) => void
 ) {
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        stream: true,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user',   content: userMsg },
-        ],
-      }),
-      signal: AbortSignal.timeout(60_000),
+  model: OLLAMA_MODEL,
+  stream: true,
+  prompt: `${system}\n\nUser: ${userMsg}\nAssistant:`
+}),
+      signal: AbortSignal.timeout(120_000),
     });
     if (!res.ok || !res.body) throw new Error(`Ollama ${res.status}`);
 
@@ -130,9 +131,12 @@ export async function ollamaStream(
       for (const line of lines) {
         try {
           const obj = JSON.parse(line);
-          const tok = obj.message?.content ?? '';
+          const tok = obj.message?.content || obj.response || '';
           if (tok) { full += tok; onToken(tok); }
-          if (obj.done) { onDone(full); return; }
+          if (obj.done) {
+  onDone(full || "...");
+  return;
+}
         } catch { /* partial JSON */ }
       }
     }
@@ -144,7 +148,7 @@ export async function ollamaStream(
 
 // ── Non-streaming ─────────────────────────────────────────────────────────────
 async function ollamaChat(system: string, userMsg: string): Promise<string> {
-  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -240,17 +244,6 @@ Be warm and direct. No bullet points.`,
   return text || null;
 }
 
-export async function getWellnessTip(driftScore: number, recentMood: number): Promise<string | null> {
-  const provider = await getActiveProvider();
-  if (provider === 'mock') return null;
-  const { text } = await aiChat(
-    `You are a CBT-trained wellness coach. Give one specific, actionable CBT technique.
-Distress: ${driftScore}/100. Mood: ${recentMood}/10.
-Name the technique, give 1-2 steps, explain why it works. Max 2 sentences. Warm tone.`,
-    'Give me a CBT-based wellness tip for right now.'
-  );
-  return text || null;
-}
 
 export async function analyseTypingStress(
   wpm: number,

@@ -1,4 +1,4 @@
-import type { Patient, TimeSlot, DriftDataPoint, WellnessTip } from '../types';
+import type { Patient, TimeSlot, DriftDataPoint} from '../types';
 
 export const generateTrend = (baseScore: number, variance: number): DriftDataPoint[] => {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -89,6 +89,9 @@ export const mockTimeSlots: TimeSlot[] = [
     date: 'Tomorrow',
     time: '10:00 AM',
     available: true,
+    duration: 50,
+    mode: 'video',
+    rating: 4.9,
   },
   {
     id: 'ts2',
@@ -98,6 +101,9 @@ export const mockTimeSlots: TimeSlot[] = [
     time: '2:30 PM',
     available: true,
     priority: true,
+    duration: 30,
+    mode: 'in-person',
+    rating: 4.8,
   },
   {
     id: 'ts3',
@@ -106,6 +112,9 @@ export const mockTimeSlots: TimeSlot[] = [
     date: 'Wed, Apr 29',
     time: '11:00 AM',
     available: true,
+    duration: 50,
+    mode: 'video',
+    rating: 4.7,
   },
   {
     id: 'ts4',
@@ -114,6 +123,9 @@ export const mockTimeSlots: TimeSlot[] = [
     date: 'Wed, Apr 29',
     time: '4:00 PM',
     available: false,
+    duration: 45,
+    mode: 'in-person',
+    rating: 4.6,
   },
   {
     id: 'ts5',
@@ -122,6 +134,31 @@ export const mockTimeSlots: TimeSlot[] = [
     date: 'Thu, Apr 30',
     time: '9:00 AM',
     available: true,
+    duration: 50,
+    mode: 'video',
+    rating: 4.9,
+  },
+  {
+    id: 'ts6',
+    doctor: 'Dr. Aisha Patel',
+    specialty: 'Psychiatrist',
+    date: 'Thu, Apr 30',
+    time: '3:00 PM',
+    available: true,
+    duration: 30,
+    mode: 'in-person',
+    rating: 4.5,
+  },
+  {
+    id: 'ts7',
+    doctor: 'Dr. Marcus Webb',
+    specialty: 'Psychiatrist',
+    date: 'Fri, May 1',
+    time: '10:30 AM',
+    available: true,
+    duration: 30,
+    mode: 'video',
+    rating: 4.8,
   },
 ];
 
@@ -143,69 +180,4 @@ export const guidanceResponses: string[] = [
   "Have you tried setting a 'worry window'? Designate 15 minutes a day to think about your concerns, then consciously redirect outside that window. It gives your mind permission to rest.",
 ];
 
-export const wellnessTips: WellnessTip[] = [
-  {
-    id: 'wt1',
-    category: 'Breathing',
-    title: 'Box Breathing',
-    body: 'Inhale for 4 counts, hold for 4, exhale for 4, hold for 4. Repeat 4 times. Used by Navy SEALs to calm the nervous system under pressure.',
-    icon: '🌬️',
-    source: 'Cleveland Clinic',
-  },
-  {
-    id: 'wt2',
-    category: 'Movement',
-    title: '5-Minute Walk',
-    body: 'Even a 5-minute walk can reduce cortisol by up to 15%. Step outside, leave your phone behind, and just notice your surroundings.',
-    icon: '🚶',
-    source: 'Harvard Health',
-  },
-  {
-    id: 'wt3',
-    category: 'Sleep',
-    title: 'Wind-Down Ritual',
-    body: 'Dim lights 1 hour before bed. Avoid screens. A consistent wind-down routine signals your brain that sleep is coming, improving sleep quality by 30%.',
-    icon: '🌙',
-    source: 'Sleep Foundation',
-  },
-  {
-    id: 'wt4',
-    category: 'Mindfulness',
-    title: 'Body Scan',
-    body: 'Lie down and slowly move your attention from your toes to your head, noticing any tension without judgment. 10 minutes reduces anxiety significantly.',
-    icon: '🧘',
-    source: 'MBSR Research',
-  },
-  {
-    id: 'wt5',
-    category: 'Connection',
-    title: 'Reach Out',
-    body: 'Send one message to someone you care about today. Social connection is the single strongest predictor of long-term mental wellbeing.',
-    icon: '💬',
-    source: 'Harvard Study of Adult Development',
-  },
-  {
-    id: 'wt6',
-    category: 'Nutrition',
-    title: 'Hydrate First',
-    body: 'Drink a glass of water before anything else in the morning. Even mild dehydration (1-2%) impairs mood, concentration, and increases anxiety.',
-    icon: '💧',
-    source: 'Journal of Nutrition',
-  },
-  {
-    id: 'wt7',
-    category: 'Journaling',
-    title: 'Gratitude Log',
-    body: 'Write 3 specific things you\'re grateful for each evening. Specificity matters — "the warm coffee this morning" beats "my family". Rewires the brain toward positivity.',
-    icon: '📓',
-    source: 'Positive Psychology Research',
-  },
-  {
-    id: 'wt8',
-    category: 'Grounding',
-    title: '5-4-3-2-1 Technique',
-    body: 'Name 5 things you see, 4 you can touch, 3 you hear, 2 you smell, 1 you taste. Instantly interrupts anxiety spirals by anchoring you to the present.',
-    icon: '⚓',
-    source: 'Cognitive Behavioral Therapy',
-  },
-];
+

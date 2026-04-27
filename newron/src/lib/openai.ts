@@ -70,19 +70,3 @@ export async function summariseJournal(content: string, mood: number): Promise<s
   return chat(messages);
 }
 
-// ── Wellness tips ─────────────────────────────────────────────────────────────
-export async function getWellnessTip(driftScore: number, recentMood: number): Promise<string | null> {
-  if (!API_KEY) return null;
-
-  const messages: Message[] = [
-    {
-      role: 'system',
-      content: `You are a mental wellness coach. Give one short, specific, actionable wellness tip based on the user's current state.
-      Distress score: ${driftScore}/100. Recent mood: ${recentMood}/10.
-      Keep it under 2 sentences. Be warm and encouraging.`,
-    },
-    { role: 'user', content: 'Give me a wellness tip for right now.' },
-  ];
-
-  return chat(messages);
-}

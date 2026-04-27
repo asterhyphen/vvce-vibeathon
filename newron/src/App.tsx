@@ -14,7 +14,7 @@ import { Appointments } from './views/Appointments';
 import { DoctorDashboard } from './views/DoctorDashboard';
 import { MoodLogger } from './views/MoodLogger';
 import { Journal } from './views/Journal';
-import { WellnessTips } from './views/WellnessTips';
+
 import { Profile } from './views/Profile';
 import { NFCMoodPage } from './views/NFCMoodPage';
 import { TypingTest } from './views/TypingTest';
@@ -72,7 +72,6 @@ function AppInner() {
     { id: 'journal'      as PatientTab, label: 'Journal',  icon: <BookOpen        className="w-[18px] h-[18px]" /> },
     { id: 'typing'       as PatientTab, label: 'Typing',   icon: <Keyboard        className="w-[18px] h-[18px]" /> },
     { id: 'breath'       as PatientTab, label: 'Breathe',  icon: <Wind            className="w-[18px] h-[18px]" /> },
-    { id: 'tips'         as PatientTab, label: 'Wellness', icon: <Heart           className="w-[18px] h-[18px]" /> },
     { id: 'report'       as PatientTab, label: 'Report',   icon: <FileText        className="w-[18px] h-[18px]" /> },
     { id: 'appointments' as PatientTab, label: 'Book',     icon: <Calendar        className="w-[18px] h-[18px]" /> },
     { id: 'profile'      as PatientTab, label: 'Profile',  icon: <User            className="w-[18px] h-[18px]" /> },
@@ -317,7 +316,6 @@ function AppInner() {
               {patientTab === 'journal'      && <Journal />}
               {patientTab === 'typing'       && <TypingTest onStressUpdate={handleTypingStress} />}
               {patientTab === 'breath'       && <BreathCoach driftScore={score} />}
-              {patientTab === 'tips'         && <WellnessTips score={score} level={level} recentMood={recentMood} />}
               {patientTab === 'report'       && <WeeklyReport avgDrift={score} level={level} typingHistory={typingHistory} />}
               {patientTab === 'appointments' && <Appointments level={level} score={score} />}
               {patientTab === 'profile'      && <Profile />}

@@ -31,6 +31,9 @@ export interface TimeSlot {
   priority?: boolean;
   bookedBy?: string;
   bookedAt?: string;
+  duration?: number;       // minutes
+  mode?: 'in-person' | 'video';
+  rating?: number;         // 1–5
 }
 
 export interface ChatMessage {
