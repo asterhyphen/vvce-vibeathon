@@ -1,0 +1,26 @@
+/* App-level overrides — most styling is in index.css and Tailwind */
+
+/* Ensure recharts tooltips look right */
+.recharts-default-tooltip {
+  background: rgba(15, 16, 32, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+/* Smooth tab transitions */
+main > * {
+  animation: fadeIn 0.35s ease-out;
+}
+
+/* Textarea focus */
+textarea:focus {
+  outline: none;
+}
+
+/* Mobile bottom nav padding */
+@media (max-width: 768px) {
+  main {
+    padding-bottom: 80px;
+  }
+}
