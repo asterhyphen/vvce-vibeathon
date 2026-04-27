@@ -1,510 +1,274 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Keyboard, RefreshCw, Zap, Target, AlertTriangle, Brain, TrendingUp, Play, CheckCircle } from 'lucide-react';
-import { analyseTypingStress } from '../lib/ai';
+import { Keyboard, RotateCcw, Activity, Timer, CheckCircle } from 'lucide-react';
 
-// ── Prompts ───────────────────────────────────────────────────────────────────
 const PROMPTS = [
-  "The quick brown fox jumps over the lazy dog near the riverbank at dawn.",
-  "Breathing slowly and deeply can calm the nervous system within seconds.",
-  "Every small step forward is still progress, no matter how it feels.",
-  "The mind is like water — when it is turbulent it is difficult to see clearly.",
-  "Rest is not a reward for finishing work. It is part of doing the work well.",
-  "You do not have to be perfect to deserve care and kindness from yourself.",
-  "Stress is not the enemy. How we respond to it shapes everything that follows.",
-  "Focus on what you can control and release what you cannot. That is enough.",
-  "The present moment is the only place where life actually happens right now.",
-  "Small consistent actions compound into meaningful change over time always.",
+  "Today I feel grateful for the small moments of peace that come when I take a deep breath and let go of what I cannot control.",
+  "Sometimes the best thing I can do for myself is to slow down and notice the world around me without judgment.",
+  "I am learning to be patient with myself because growth takes time and every step forward matters.",
+  "It is okay to have difficult days. What matters is that I keep showing up for myself with kindness and compassion.",
+  "My thoughts do not define me. I can observe them, acknowledge them, and choose which ones to hold onto.",
+  "Taking care of my mental health is not selfish. It is necessary so I can show up fully for the people I love.",
 ];
 
-// ── Stress level from typing metrics ─────────────────────────────────────────
-interface TypingResult {
+interface TypingStats {
   wpm: number;
   accuracy: number;
-  errorCount: number;
-  errorRate: number;
-  avgPause: number;        // ms between keystrokes
-  hesitationCount: number; // pauses > 800ms
-  backspaceCount: number;
-  duration: number;        // seconds
-  stressScore: number;     // 0–100
-  stressLabel: string;
-  stressColor: string;
+  backspaceRate: number;
+  avgPause: number;
+  stressScore: number;
 }
 
-function calcStress(wpm: number, accuracy: number, errorRate: number, avgPause: number, hesitations: number): number {
-  let stress = 0;
-
-  // Low WPM relative to normal (avg ~40 WPM) → stress
-  if (wpm < 15)      stress += 30;
-  else if (wpm < 25) stress += 20;
-  else if (wpm < 35) stress += 10;
-  else if (wpm > 70) stress += 5; // rushing also signals stress
-
-  // Low accuracy → cognitive load
-  if (accuracy < 70)      stress += 30;
-  else if (accuracy < 80) stress += 20;
-  else if (accuracy < 90) stress += 10;
-  else if (accuracy < 95) stress += 5;
-
-  // High error rate
-  if (errorRate > 20)      stress += 20;
-  else if (errorRate > 10) stress += 10;
-  else if (errorRate > 5)  stress += 5;
-
-  // Long pauses → hesitation / anxiety
-  if (avgPause > 1200)     stress += 20;
-  else if (avgPause > 700) stress += 12;
-  else if (avgPause > 400) stress += 5;
-
-  // Hesitation count
-  stress += Math.min(20, hesitations * 4);
-
-  return Math.max(0, Math.min(100, stress));
+function computeStress(wpm: number, accuracy: number, backspaceRate: number, avgPause: number): number {
+  let score = 0;
+  if (wpm < 20) score += 25;
+  else if (wpm < 30) score += 15;
+  else if (wpm < 40) score += 8;
+  if (accuracy < 70) score += 25;
+  else if (accuracy < 85) score += 15;
+  else if (accuracy < 92) score += 8;
+  if (backspaceRate > 25) score += 25;
+  else if (backspaceRate > 15) score += 15;
+  else if (backspaceRate > 8) score += 5;
+  if (avgPause > 1200) score += 20;
+  else if (avgPause > 700) score += 10;
+  else if (avgPause > 400) score += 5;
+  return Math.max(0, Math.min(100, score));
 }
 
-function stressLabel(score: number): { label: string; color: string; emoji: string } {
-  if (score >= 65) return { label: 'High Stress',    color: '#ef4444', emoji: '😰' };
-  if (score >= 40) return { label: 'Moderate Stress', color: '#f59e0b', emoji: '😟' };
-  if (score >= 20) return { label: 'Mild Tension',   color: '#84cc16', emoji: '🙂' };
-  return              { label: 'Relaxed',            color: '#10b981', emoji: '😌' };
-}
-
-// ── Char state ────────────────────────────────────────────────────────────────
-type CharState = 'pending' | 'correct' | 'wrong' | 'extra';
-
-interface CharData {
-  char: string;
-  state: CharState;
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
-export const TypingTest: React.FC<{ onStressUpdate?: (score: number) => void }> = ({ onStressUpdate }) => {
-  const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle');
-  const [promptIdx, setPromptIdx] = useState(0);
-  const [chars, setChars] = useState<CharData[]>([]);
-  const [cursor, setCursor] = useState(0);
-  const [input, setInput] = useState('');
-  const [startTime, setStartTime] = useState<number | null>(null);
+export const TypingTest: React.FC<{ onStressUpdate: (score: number) => void }> = ({ onStressUpdate }) => {
+  const [prompt, setPrompt] = useState('');
+  const [typed, setTyped] = useState('');
+  const [started, setStarted] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [stats, setStats] = useState<TypingStats | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [result, setResult] = useState<TypingResult | null>(null);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
-  const [loadingAi, setLoadingAi] = useState(false);
-  const [history, setHistory] = useState<TypingResult[]>([]);
 
-  const keystrokeTimes = useRef<number[]>([]);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const startTime = useRef(0);
   const backspaceCount = useRef(0);
-  const hesitationCount = useRef(0);
-  const lastKeyTime = useRef<number | null>(null);
+  const totalKeystrokes = useRef(0);
+  const pauseList = useRef<number[]>([]);
+  const lastKeystroke = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  const prompt = PROMPTS[promptIdx];
-
-  // Init chars when prompt changes
-  useEffect(() => {
-    setChars(prompt.split('').map(c => ({ char: c, state: 'pending' })));
-    setCursor(0);
-    setInput('');
-    keystrokeTimes.current = [];
-    backspaceCount.current = 0;
-    hesitationCount.current = 0;
-    lastKeyTime.current = null;
-  }, [prompt]);
-
-  // Timer
-  useEffect(() => {
-    if (phase === 'running') {
-      timerRef.current = setInterval(() => {
-        setElapsed(Date.now() - (startTime ?? Date.now()));
-      }, 100);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [phase, startTime]);
-
-  const startTest = useCallback(() => {
-    const idx = Math.floor(Math.random() * PROMPTS.length);
-    setPromptIdx(idx);
-    setPhase('running');
-    setStartTime(Date.now());
-    setElapsed(0);
-    setResult(null);
-    setAiInsight(null);
-    setTimeout(() => inputRef.current?.focus(), 50);
+  const pickPrompt = useCallback(() => {
+    setPrompt(PROMPTS[Math.floor(Math.random() * PROMPTS.length)]);
   }, []);
 
-  const finishTest = useCallback((finalInput: string, finalChars: CharData[]) => {
-    const duration = (Date.now() - (startTime ?? Date.now())) / 1000;
-    const words = finalInput.trim().split(/\s+/).length;
-    const wpm = Math.round((words / duration) * 60);
+  useEffect(() => { pickPrompt(); }, [pickPrompt]);
 
-    const correctCount = finalChars.filter(c => c.state === 'correct').length;
-    const wrongCount   = finalChars.filter(c => c.state === 'wrong').length;
-    const total = correctCount + wrongCount;
-    const accuracy = total > 0 ? Math.round((correctCount / total) * 100) : 100;
-    const errorRate = total > 0 ? Math.round((wrongCount / total) * 100) : 0;
-
-    const pauses = keystrokeTimes.current;
-    const avgPause = pauses.length > 1
-      ? pauses.slice(1).reduce((sum, t, i) => sum + (t - pauses[i]), 0) / (pauses.length - 1)
-      : 200;
-
-    const stressScore = calcStress(wpm, accuracy, errorRate, avgPause, hesitationCount.current);
-    const { label, color, emoji } = stressLabel(stressScore);
-
-    const res: TypingResult = {
-      wpm, accuracy, errorCount: wrongCount, errorRate,
-      avgPause: Math.round(avgPause),
-      hesitationCount: hesitationCount.current,
-      backspaceCount: backspaceCount.current,
-      duration: Math.round(duration),
-      stressScore,
-      stressLabel: `${emoji} ${label}`,
-      stressColor: color,
-    };
-
-    setResult(res);
-    setPhase('done');
-    setHistory(prev => [res, ...prev].slice(0, 5));
-    onStressUpdate?.(stressScore);
-
-    // Fetch AI insight
-    setLoadingAi(true);
-    analyseTypingStress(wpm, accuracy, errorRate, Math.round(avgPause))
-      .then(insight => setAiInsight(insight))
-      .catch(() => setAiInsight(null))
-      .finally(() => setLoadingAi(false));
-  }, [startTime, onStressUpdate]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (phase !== 'running') return;
-
-    const now = Date.now();
-
-    // Track pauses
-    if (lastKeyTime.current !== null) {
-      const gap = now - lastKeyTime.current;
-      if (gap > 800) hesitationCount.current++;
+  useEffect(() => {
+    if (started && !finished) {
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTime.current) / 1000));
+      }, 250);
     }
-    lastKeyTime.current = now;
-    keystrokeTimes.current.push(now);
-
-    if (e.key === 'Backspace') {
-      backspaceCount.current++;
-    }
-  }, [phase]);
-
-  const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (phase !== 'running') return;
-    const val = e.target.value;
-    setInput(val);
-
-    const newChars = prompt.split('').map((c, i) => {
-      if (i >= val.length) return { char: c, state: 'pending' as CharState };
-      return { char: c, state: val[i] === c ? 'correct' as CharState : 'wrong' as CharState };
-    });
-
-    setChars(newChars);
-    setCursor(val.length);
-
-    // Finished when all chars typed
-    if (val.length >= prompt.length) {
-      finishTest(val, newChars);
-    }
-  }, [phase, prompt, finishTest]);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [started, finished]);
 
   const reset = useCallback(() => {
-    setPhase('idle');
-    setInput('');
-    setResult(null);
-    setAiInsight(null);
+    setTyped('');
+    setStarted(false);
+    setFinished(false);
+    setStats(null);
     setElapsed(0);
-    setChars(prompt.split('').map(c => ({ char: c, state: 'pending' })));
-    setCursor(0);
-    keystrokeTimes.current = [];
+    startTime.current = 0;
     backspaceCount.current = 0;
-    hesitationCount.current = 0;
-    lastKeyTime.current = null;
-  }, [prompt]);
+    totalKeystrokes.current = 0;
+    pauseList.current = [];
+    lastKeystroke.current = 0;
+    pickPrompt();
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [pickPrompt]);
 
-  const elapsedSec = elapsed / 1000;
-  const liveWpm = startTime && elapsedSec > 1
-    ? Math.round((input.trim().split(/\s+/).filter(Boolean).length / elapsedSec) * 60)
-    : 0;
+  const finish = useCallback((typedText: string) => {
+    setFinished(true);
+    if (timerRef.current) clearInterval(timerRef.current);
+    const totalTime = (Date.now() - startTime.current) / 1000;
+    const words = typedText.trim().split(/\s+/).length;
+    const wpm = totalTime > 0 ? Math.round((words / totalTime) * 60) : 0;
+    let correct = 0;
+    const minLen = Math.min(typedText.length, prompt.length);
+    for (let i = 0; i < minLen; i++) {
+      if (typedText[i] === prompt[i]) correct++;
+    }
+    const accuracy = prompt.length > 0 ? Math.round((correct / prompt.length) * 100) : 0;
+    const bsRate = totalKeystrokes.current > 0
+      ? Math.round((backspaceCount.current / totalKeystrokes.current) * 100) : 0;
+    const avgPause = pauseList.current.length > 0
+      ? Math.round(pauseList.current.reduce((a, b) => a + b, 0) / pauseList.current.length) : 300;
+    const stressScore = computeStress(wpm, accuracy, bsRate, avgPause);
+    setStats({ wpm, accuracy, backspaceRate: bsRate, avgPause, stressScore });
+    onStressUpdate(stressScore);
+  }, [prompt, onStressUpdate]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (finished) return;
+    const now = Date.now();
+    if (!started) { setStarted(true); startTime.current = now; }
+    totalKeystrokes.current++;
+    if (e.key === 'Backspace') backspaceCount.current++;
+    if (lastKeystroke.current > 0) {
+      const pause = now - lastKeystroke.current;
+      if (pause > 80 && pause < 5000) {
+        pauseList.current.push(pause);
+        if (pauseList.current.length > 50) pauseList.current.shift();
+      }
+    }
+    lastKeystroke.current = now;
+  }, [started, finished]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (finished) return;
+    const val = e.target.value;
+    setTyped(val);
+    if (val.length >= prompt.length) finish(val);
+  }, [finished, prompt, finish]);
+
+  const renderPrompt = () => prompt.split('').map((char, i) => {
+    let color = 'var(--text-3)';
+    if (i < typed.length) color = typed[i] === char ? 'var(--accent)' : '#ef4444';
+    return (
+      <span key={i} style={{
+        color,
+        borderBottom: i === typed.length ? '2px solid var(--accent)' : 'none',
+        transition: 'color 0.1s ease',
+      }}>{char}</span>
+    );
+  });
+
+  const stressLabel = (score: number) => {
+    if (score <= 20) return { text: 'Calm', color: '#10b981' };
+    if (score <= 40) return { text: 'Mild', color: '#84cc16' };
+    if (score <= 60) return { text: 'Moderate', color: '#f59e0b' };
+    if (score <= 80) return { text: 'Elevated', color: '#f97316' };
+    return { text: 'High', color: '#ef4444' };
+  };
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="animate-fade-in">
       {/* Header */}
-      <div className="glass rounded-2xl p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
-              <Keyboard className="w-5 h-5 text-violet-400" />
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Keyboard style={{ width: 18, height: 18, color: 'var(--accent)' }} />
             </div>
             <div>
-              <h2 className="font-semibold text-slate-100">Typing Speed & Stress Test</h2>
-              <p className="text-xs text-slate-400">Measures WPM, accuracy, hesitation, and cognitive stress</p>
+              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>Typing Wellness Check</p>
+              <p style={{ fontSize: 12, color: 'var(--text-2)' }}>Type the prompt below — your patterns reveal stress signals</p>
             </div>
           </div>
-          {phase !== 'idle' && (
-            <button onClick={reset}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-700/50 hover:bg-slate-700 border border-slate-600/30 text-slate-300 text-xs font-medium transition-all">
-              <RefreshCw className="w-3.5 h-3.5" /> Reset
-            </button>
-          )}
+          <button onClick={reset} className="btn-ghost"
+            style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <RotateCcw style={{ width: 13, height: 13 }} /> New Prompt
+          </button>
         </div>
       </div>
 
-      {/* Idle state */}
-      {phase === 'idle' && (
-        <div className="glass rounded-2xl p-8 text-center animate-fade-in">
-          <div className="text-5xl mb-4">⌨️</div>
-          <h3 className="text-lg font-semibold text-slate-100 mb-2">Ready to measure your stress?</h3>
-          <p className="text-sm text-slate-400 mb-6 max-w-sm mx-auto leading-relaxed">
-            Type the prompt as accurately as you can. Your speed, pauses, and error patterns reveal your current cognitive stress level.
-          </p>
-          <button
-            onClick={startTest}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition-all hover:scale-105"
-          >
-            <Play className="w-4 h-4" /> Start Test
-          </button>
-
-          {/* History */}
-          {history.length > 0 && (
-            <div className="mt-6 text-left">
-              <p className="text-xs text-slate-500 mb-2 text-center">Recent results</p>
-              <div className="space-y-2">
-                {history.map((r, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/40 border border-slate-700/30">
-                    <span className="text-xs text-slate-400">{r.stressLabel}</span>
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="text-violet-300">{r.wpm} WPM</span>
-                      <span className="text-slate-400">{r.accuracy}% acc</span>
-                      <span style={{ color: r.stressColor }} className="font-medium">Stress {r.stressScore}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Timer bar */}
+      {started && !finished && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 14px', borderRadius: 10,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+        }}>
+          <Timer style={{ width: 14, height: 14, color: 'var(--accent)' }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', fontVariantNumeric: 'tabular-nums' }}>
+            {formatTime(elapsed)}
+          </span>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{typed.length} / {prompt.length}</span>
+          <div style={{ height: 4, flex: 1, maxWidth: 120, borderRadius: 99, background: 'var(--border-2)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 99, width: `${Math.min(100, (typed.length / prompt.length) * 100)}%`,
+              background: 'var(--accent)', transition: 'width 0.2s ease',
+            }} />
+          </div>
         </div>
       )}
 
-      {/* Running state */}
-      {phase === 'running' && (
-        <div className="space-y-4 animate-fade-in">
-          {/* Live stats bar */}
-          <div className="glass rounded-2xl px-5 py-3 flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-violet-400" />
-              <span className="text-xs text-slate-400">WPM</span>
-              <span className="text-sm font-bold text-violet-300 tabular-nums w-8">{liveWpm}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-xs text-slate-400">Progress</span>
-              <span className="text-sm font-bold text-blue-300 tabular-nums">{Math.round((cursor / prompt.length) * 100)}%</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-xs text-slate-400">Errors</span>
-              <span className="text-sm font-bold text-amber-300 tabular-nums">
-                {chars.filter(c => c.state === 'wrong').length}
-              </span>
-            </div>
-            <div className="ml-auto text-xs text-slate-500 tabular-nums">
-              {elapsedSec.toFixed(1)}s
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-1 rounded-full bg-slate-700/50 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-violet-500 transition-all duration-100"
-              style={{ width: `${(cursor / prompt.length) * 100}%` }}
-            />
-          </div>
-
-          {/* Prompt display */}
-          <div className="glass rounded-2xl p-5">
-            <p className="font-mono text-base leading-relaxed tracking-wide select-none" aria-label="Typing prompt">
-              {chars.map((c, i) => (
-                <span
-                  key={i}
-                  className={`relative transition-colors duration-75 ${
-                    c.state === 'correct' ? 'text-emerald-400' :
-                    c.state === 'wrong'   ? 'text-red-400 bg-red-500/20 rounded' :
-                    i === cursor          ? 'text-slate-100' :
-                    'text-slate-500'
-                  }`}
-                >
-                  {/* Blinking cursor */}
-                  {i === cursor && (
-                    <span className="absolute -left-0.5 top-0 bottom-0 w-0.5 bg-violet-400 animate-pulse rounded" />
-                  )}
-                  {c.char === ' ' ? '\u00A0' : c.char}
-                </span>
-              ))}
-            </p>
-          </div>
-
-          {/* Hidden input */}
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            className="opacity-0 absolute pointer-events-none w-0 h-0"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            aria-label="Typing input"
-          />
-
-          {/* Click to focus hint */}
-          <button
-            onClick={() => inputRef.current?.focus()}
-            className="w-full py-3 rounded-xl border border-dashed border-slate-600/50 text-slate-500 text-sm hover:border-violet-500/40 hover:text-violet-400 transition-all"
-          >
-            Click here or start typing ↑
-          </button>
+      {/* Prompt + Input */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+        <div style={{
+          fontSize: 15, lineHeight: 1.8, fontFamily: 'monospace',
+          padding: 16, borderRadius: 12,
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+          marginBottom: 16, userSelect: 'none',
+        }}>
+          {renderPrompt()}
         </div>
-      )}
+        <textarea
+          ref={inputRef}
+          value={typed}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          disabled={finished}
+          placeholder={finished ? 'Test complete!' : 'Start typing here...'}
+          rows={3}
+          className="input"
+          style={{ fontSize: 14, fontFamily: 'monospace', resize: 'none', opacity: finished ? 0.5 : 1 }}
+          aria-label="Typing test input"
+          autoFocus
+        />
+      </div>
 
       {/* Results */}
-      {phase === 'done' && result && (
-        <div className="space-y-4 animate-fade-in">
+      {finished && stats && (
+        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Stress score hero */}
-          <div
-            className="glass rounded-2xl p-6 text-center"
-            style={{ borderColor: `${result.stressColor}30` }}
-          >
-            <div className="text-4xl mb-2">{result.stressLabel.split(' ')[0]}</div>
-            <h3 className="text-xl font-bold mb-1" style={{ color: result.stressColor }}>
-              {result.stressLabel.split(' ').slice(1).join(' ')}
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">Stress Score: <span className="font-bold" style={{ color: result.stressColor }}>{result.stressScore}/100</span></p>
-
-            {/* Stress bar */}
-            <div className="h-3 rounded-full bg-slate-700/50 overflow-hidden max-w-xs mx-auto mb-4">
-              <div
-                className="h-full rounded-full transition-all duration-1000"
-                style={{
-                  width: `${result.stressScore}%`,
-                  background: `linear-gradient(to right, #10b981, ${result.stressColor})`,
-                }}
-              />
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, textAlign: 'center',
+          }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: '50%', margin: '0 auto 12px',
+              background: `${stressLabel(stats.stressScore).color}18`,
+              border: `2px solid ${stressLabel(stats.stressScore).color}40`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 28, fontWeight: 700, color: stressLabel(stats.stressScore).color }}>
+                {stats.stressScore}
+              </span>
             </div>
-
-            <p className="text-xs text-slate-500">
-              {result.stressScore < 20 && "You're typing fluidly — low cognitive load detected."}
-              {result.stressScore >= 20 && result.stressScore < 40 && "Mild tension in your typing pattern. Nothing to worry about."}
-              {result.stressScore >= 40 && result.stressScore < 65 && "Moderate stress signals detected. Consider a short break."}
-              {result.stressScore >= 65 && "High stress indicators. Your typing shows significant cognitive strain."}
+            <p style={{ fontSize: 16, fontWeight: 600, color: stressLabel(stats.stressScore).color }}>
+              {stressLabel(stats.stressScore).text} Stress
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+              Based on your typing patterns during this exercise
             </p>
           </div>
 
-          {/* Metrics grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Stat cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {[
-              { label: 'WPM',       value: result.wpm,           unit: '',   icon: <Zap className="w-3.5 h-3.5" />,          color: '#a78bfa' },
-              { label: 'Accuracy',  value: result.accuracy,      unit: '%',  icon: <Target className="w-3.5 h-3.5" />,        color: '#60a5fa' },
-              { label: 'Errors',    value: result.errorCount,    unit: '',   icon: <AlertTriangle className="w-3.5 h-3.5" />, color: result.errorCount > 5 ? '#f87171' : '#34d399' },
-              { label: 'Hesitations', value: result.hesitationCount, unit: '', icon: <Brain className="w-3.5 h-3.5" />,      color: result.hesitationCount > 3 ? '#f59e0b' : '#34d399' },
-            ].map(m => (
-              <div key={m.label} className="glass rounded-xl p-3 text-center">
-                <div className="flex items-center justify-center gap-1 mb-1" style={{ color: m.color }}>
-                  {m.icon}
-                  <span className="text-xs text-slate-400">{m.label}</span>
+              { label: 'Speed', value: `${stats.wpm} WPM`, icon: <Keyboard style={{ width: 14, height: 14 }} /> },
+              { label: 'Accuracy', value: `${stats.accuracy}%`, icon: <CheckCircle style={{ width: 14, height: 14 }} /> },
+              { label: 'Correction Rate', value: `${stats.backspaceRate}%`, icon: <Activity style={{ width: 14, height: 14 }} /> },
+              { label: 'Avg Pause', value: `${stats.avgPause}ms`, icon: <Timer style={{ width: 14, height: 14 }} /> },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: 'var(--accent)' }}>
+                  {s.icon}
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.label}</span>
                 </div>
-                <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}{m.unit}</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>{s.value}</p>
               </div>
             ))}
           </div>
 
-          {/* Extra stats */}
-          <div className="glass rounded-2xl p-4">
-            <h4 className="text-xs font-medium text-slate-400 mb-3 uppercase tracking-wide">Detailed Breakdown</h4>
-            <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-              {[
-                { label: 'Duration',        value: `${result.duration}s` },
-                { label: 'Avg key pause',   value: `${result.avgPause}ms` },
-                { label: 'Backspaces',      value: result.backspaceCount },
-                { label: 'Error rate',      value: `${result.errorRate}%` },
-              ].map(s => (
-                <div key={s.label} className="flex items-center justify-between py-1 border-b border-slate-700/20">
-                  <span className="text-xs text-slate-500">{s.label}</span>
-                  <span className="text-xs font-medium text-slate-300">{s.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* AI insight */}
-          <div className="glass rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Brain className="w-4 h-4 text-violet-400" />
-              <span className="text-sm font-medium text-slate-200">AI Stress Analysis</span>
-              {loadingAi && <span className="ml-auto text-xs text-violet-400 animate-pulse">Analysing…</span>}
-            </div>
-            {aiInsight ? (
-              <p className="text-sm text-slate-300 leading-relaxed animate-fade-in">{aiInsight}</p>
-            ) : !loadingAi ? (
-              <p className="text-sm text-slate-400 leading-relaxed">
-                {result.stressScore >= 65
-                  ? `Your typing shows ${result.hesitationCount} hesitation pauses and ${result.errorCount} errors — patterns consistent with elevated cognitive stress. Consider stepping away for a few minutes.`
-                  : result.stressScore >= 40
-                  ? `Moderate stress signals: avg pause of ${result.avgPause}ms and ${result.backspaceCount} corrections suggest some mental friction. A short walk could help reset focus.`
-                  : `Typing at ${result.wpm} WPM with ${result.accuracy}% accuracy indicates a calm, focused state. Your cognitive load appears well-managed right now.`
-                }
-              </p>
-            ) : null}
-          </div>
-
-          {/* Trend comparison */}
-          {history.length > 1 && (
-            <div className="glass rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp className="w-4 h-4 text-violet-400" />
-                <span className="text-sm font-medium text-slate-200">Stress Trend</span>
-              </div>
-              <div className="flex items-end gap-2 h-12">
-                {history.slice().reverse().map((r, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full rounded-t-sm min-h-1"
-                      style={{
-                        height: `${(r.stressScore / 100) * 48}px`,
-                        background: r.stressColor,
-                        opacity: 0.6 + i * 0.08,
-                      }}
-                    />
-                    <span className="text-xs" style={{ color: r.stressColor }}>{r.stressScore}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-3">
-            <button
-              onClick={startTest}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-sm transition-all hover:scale-[1.02]"
-            >
-              <RefreshCw className="w-4 h-4" /> Try Again
-            </button>
-            <button
-              onClick={reset}
-              className="px-5 py-3 rounded-xl bg-slate-700/50 hover:bg-slate-700 border border-slate-600/30 text-slate-300 text-sm transition-all"
-            >
-              <CheckCircle className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Try again */}
+          <button onClick={reset} className="btn-primary"
+            style={{ width: '100%', justifyContent: 'center', padding: '12px 0', borderRadius: 12 }}>
+            <RotateCcw style={{ width: 14, height: 14 }} /> Try Again
+          </button>
         </div>
       )}
     </div>

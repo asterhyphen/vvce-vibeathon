@@ -1,12 +1,18 @@
 import React, { useState, useRef } from 'react';
-import { Upload, LogOut, Edit2, Check, X, Shield } from 'lucide-react';
+import { Upload, LogOut, Edit2, Check, X, Shield, User, Stethoscope, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+const S = {
+  card: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 },
+  label: { fontSize: 11, color: 'var(--text-3)', display: 'block' as const, marginBottom: 5 },
+  row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)' },
+};
 
 export const Profile: React.FC = () => {
   const { user, logout, updateProfile } = useAuth();
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(user?.name || '');
-  const [age, setAge] = useState(String(user?.age || ''));
+  const [name, setName]       = useState(user?.name || '');
+  const [age, setAge]         = useState(String(user?.age || ''));
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
@@ -26,104 +32,140 @@ export const Profile: React.FC = () => {
   };
 
   const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const isPsych = user.role === 'psychiatrist';
+  const isAdm   = user.role === ('admin' as any);
+
+  const roleColor  = isPsych ? '#60a5fa' : isAdm ? '#f59e0b' : 'var(--accent)';
+  const RoleIcon   = isPsych ? Stethoscope : isAdm ? Shield : User;
+  const roleLabel  = isPsych ? 'Psychiatrist' : isAdm ? 'Administrator' : 'Patient';
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="animate-fade-in">
+
       {/* Profile card */}
-      <div className="glass rounded-2xl p-6">
-        <div className="flex flex-col items-center gap-4">
+      <div style={S.card}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+
           {/* Avatar */}
-          <div className="relative">
+          <div style={{ position: 'relative' }}>
             <div
               onClick={() => fileRef.current?.click()}
-              className="w-20 h-20 rounded-full border-2 border-violet-500/40 overflow-hidden cursor-pointer hover:border-violet-400 transition-colors flex items-center justify-center bg-violet-600/20"
+              style={{
+                width: 80, height: 80, borderRadius: '50%', cursor: 'pointer',
+                border: `2px solid ${roleColor}50`, overflow: 'hidden',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: `${roleColor}15`, transition: 'border-color 0.15s ease',
+              }}
             >
               {user.avatar
-                ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
-                : <span className="text-2xl font-bold text-violet-300">{initials}</span>
+                ? <img src={user.avatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: 24, fontWeight: 700, color: roleColor }}>{initials}</span>
               }
             </div>
             <button
               onClick={() => fileRef.current?.click()}
-              className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-violet-600 border-2 border-[#080a14] flex items-center justify-center hover:bg-violet-500 transition-colors"
+              style={{
+                position: 'absolute', bottom: 0, right: 0,
+                width: 26, height: 26, borderRadius: '50%',
+                background: 'var(--accent)', border: '2px solid var(--bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer',
+              }}
             >
-              <Upload className="w-3 h-3 text-white" />
+              <Upload style={{ width: 11, height: 11, color: 'var(--accent-text)' }} />
             </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarUpload} />
           </div>
 
+          {/* Role badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 12px', borderRadius: 99,
+            background: `${roleColor}15`, border: `1px solid ${roleColor}35`,
+            color: roleColor, fontSize: 12, fontWeight: 500,
+          }}>
+            <RoleIcon style={{ width: 12, height: 12 }} />
+            {roleLabel}
+          </div>
+
+          {/* Edit form */}
           {editing ? (
-            <div className="w-full max-w-xs space-y-3">
+            <div style={{ width: '100%', maxWidth: 280, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Name</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)}
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/60 transition-colors" />
+                <label style={S.label}>Full Name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} className="input" style={{ fontSize: 13 }} />
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Age</label>
-                <input type="number" value={age} onChange={e => setAge(e.target.value)} min="13" max="120"
-                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/60 transition-colors" />
+                <label style={S.label}>Age</label>
+                <input type="number" value={age} onChange={e => setAge(e.target.value)} min="13" max="120" className="input" style={{ fontSize: 13 }} />
               </div>
-              <div className="flex gap-2">
-                <button onClick={handleSave}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-all">
-                  <Check className="w-4 h-4" /> Save
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleSave} className="btn-primary" style={{ flex: 1, justifyContent: 'center', fontSize: 13 }}>
+                  <Check style={{ width: 14, height: 14 }} /> Save
                 </button>
                 <button onClick={() => { setEditing(false); setName(user.name); setAge(String(user.age)); }}
-                  className="px-4 py-2 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-sm transition-all">
-                  <X className="w-4 h-4" />
+                  className="btn-ghost" style={{ fontSize: 13 }}>
+                  <X style={{ width: 14, height: 14 }} />
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-center">
-              <h2 className="text-xl font-semibold text-slate-100">{user.name}</h2>
-              <p className="text-sm text-slate-400">{user.email}</p>
-              <p className="text-sm text-slate-400">Age {user.age}</p>
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                  user.role === 'psychiatrist'
-                    ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
-                    : 'bg-violet-500/15 border border-violet-500/30 text-violet-300'
-                }`}>
-                  {user.role === 'psychiatrist' ? '🩺 Psychiatrist' : '👤 Patient'}
-                </span>
-              </div>
-              <button onClick={() => setEditing(true)}
-                className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-sm transition-all mx-auto">
-                <Edit2 className="w-3.5 h-3.5" /> Edit Profile
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-1)' }}>{user.name}</p>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 2 }}>{user.email}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Age {user.age}</p>
+              <button onClick={() => setEditing(true)} className="btn-ghost"
+                style={{ marginTop: 12, fontSize: 12, padding: '6px 14px' }}>
+                <Edit2 style={{ width: 12, height: 12 }} /> Edit Profile
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Account info */}
-      <div className="glass rounded-2xl p-5">
-        <h3 className="text-sm font-medium text-slate-200 mb-3 flex items-center gap-2">
-          <Shield className="w-4 h-4 text-violet-400" /> Account Details
-        </h3>
-        <div className="space-y-3">
-          {[
-            { label: 'Email', value: user.email },
-            { label: 'Role', value: user.role === 'psychiatrist' ? 'Psychiatrist' : 'Patient' },
-            { label: 'Member since', value: 'April 2026' },
-            { label: 'Data privacy', value: 'All data stored locally' },
-          ].map(item => (
-            <div key={item.label} className="flex items-center justify-between py-2 border-b border-slate-700/20 last:border-0">
-              <span className="text-xs text-slate-400">{item.label}</span>
-              <span className="text-xs text-slate-200">{item.value}</span>
-            </div>
-          ))}
+      {/* Account details */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+          <Shield style={{ width: 14, height: 14, color: 'var(--accent)' }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Account Details</span>
         </div>
+        {[
+          { label: 'Email',        value: user.email },
+          { label: 'Role',         value: roleLabel },
+          { label: 'Member since', value: 'April 2026' },
+          { label: 'Data storage', value: 'Local only' },
+        ].map(item => (
+          <div key={item.label} style={{ ...S.row, ...(item === [{ label: 'Data storage', value: 'Local only' }][0] ? { borderBottom: 'none' } : {}) }}>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{item.label}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-1)', fontWeight: 500 }}>{item.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Security */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+          <Lock style={{ width: 14, height: 14, color: 'var(--accent)' }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Security</span>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
+          All data is stored locally in your browser session. No data is transmitted to external servers unless AI features are enabled.
+        </p>
       </div>
 
       {/* Sign out */}
       <button
         onClick={logout}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-sm font-medium transition-all"
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '12px 0', borderRadius: 12, border: '1px solid rgba(239,68,68,0.3)',
+          background: 'rgba(239,68,68,0.08)', color: '#ef4444',
+          fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s ease',
+        }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.15)'}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)'}
       >
-        <LogOut className="w-4 h-4" />
+        <LogOut style={{ width: 15, height: 15 }} />
         Sign Out
       </button>
     </div>

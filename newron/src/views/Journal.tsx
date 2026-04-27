@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
-import { BookOpen, Plus, Sparkles, Send, Trash2, Tag, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  BookOpen, Plus, Sparkles, Send, Trash2, Tag,
+  ChevronDown, ChevronUp, CheckCircle, Activity, Brain, X,
+} from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { summariseJournal } from '../lib/ai';
+import { autoAnalyseJournalEntry, summariseJournal } from '../lib/ai';
 import type { JournalEntry } from '../types';
 
 const MOOD_EMOJIS: Record<number, string> = {
@@ -13,12 +16,51 @@ const MOOD_COLORS: Record<number, string> = {
 };
 
 const FALLBACK_SUMMARIES = [
-  'Entry reflects emotional processing with themes of self-reflection. Mood indicators suggest moderate stress. Recommend continued journaling and mindfulness practices.',
-  'Positive coping patterns observed. Entry shows resilience and problem-solving orientation. No immediate risk indicators.',
-  'Entry indicates elevated stress levels with rumination patterns. Key themes: work pressure, fatigue. Recommend stress management review.',
-  'Mixed emotional state detected. Some positive anchors present alongside challenges. Healthy emotional awareness demonstrated.',
+  'Entry reflects emotional processing with themes of self-reflection. Cognitive patterns suggest moderate rumination. Recommend continued journaling and behavioural activation.',
+  'Positive coping patterns observed. Entry shows resilience and problem-solving orientation. No immediate risk indicators. Encourage maintenance of current strategies.',
+  'Entry indicates elevated stress with possible catastrophising patterns. Key themes: work pressure, fatigue. Recommend thought record exercise and stress management review.',
+  'Mixed emotional state with some positive anchors. Healthy emotional awareness demonstrated. Consider exploring automatic thoughts around the challenges mentioned.',
 ];
 
+// ── Typing signal tracker for journal ────────────────────────────────────────
+function useJournalTypingSignals() {
+  const keystrokeTimes = useRef<number[]>([]);
+  const backspaceCount = useRef(0);
+  const totalChars     = useRef(0);
+  const lastKey        = useRef(Date.now());
+
+  const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const now = Date.now();
+    keystrokeTimes.current.push(now);
+    if (keystrokeTimes.current.length > 50) keystrokeTimes.current.shift();
+    if (e.key === 'Backspace') backspaceCount.current++;
+    totalChars.current++;
+    lastKey.current = now;
+  }, []);
+
+  const getSignals = useCallback(() => {
+    const times = keystrokeTimes.current;
+    const wpm = times.length > 2
+      ? Math.round((times.length / ((times[times.length - 1] - times[0]) / 1000)) * 60 / 5)
+      : 0;
+    const backspaceRate = totalChars.current > 0
+      ? (backspaceCount.current / totalChars.current) * 100
+      : 0;
+    const pauses = times.slice(1).map((t, i) => t - times[i]).filter(p => p > 50 && p < 5000);
+    const avgPause = pauses.length > 0 ? pauses.reduce((a, b) => a + b, 0) / pauses.length : 300;
+    return { wpm: Math.max(0, wpm), backspaceRate, avgPause: Math.round(avgPause) };
+  }, []);
+
+  const reset = useCallback(() => {
+    keystrokeTimes.current = [];
+    backspaceCount.current = 0;
+    totalChars.current = 0;
+  }, []);
+
+  return { onKeyDown, getSignals, reset };
+}
+
+// ── Journal card ──────────────────────────────────────────────────────────────
 const JournalCard: React.FC<{
   entry: JournalEntry;
   onSummarise: (id: string) => void;
@@ -31,76 +73,111 @@ const JournalCard: React.FC<{
   const moodEmoji = MOOD_EMOJIS[entry.mood] || '😶';
 
   return (
-    <div className="glass rounded-2xl p-4 animate-fade-in">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <span className="text-xl flex-shrink-0 mt-0.5">{moodEmoji}</span>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-medium text-slate-100 text-sm truncate">{entry.title}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 16, padding: 16,
+    }} className="animate-fade-in">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>{moodEmoji}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {entry.title}
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
               {entry.timestamp.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
               {' · '}
               <span style={{ color: moodColor }}>Mood {entry.mood}/10</span>
+              {entry.aiSummary && (
+                <span style={{ marginLeft: 6, color: '#a78bfa' }}>· AI analysed</span>
+              )}
             </p>
             {entry.tags && entry.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                 {entry.tags.map(t => (
-                  <span key={t} className="text-xs px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 flex items-center gap-0.5">
-                    <Tag className="w-2.5 h-2.5" />{t}
+                  <span key={t} style={{
+                    fontSize: 10, padding: '2px 8px', borderRadius: 99,
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 3,
+                  }}>
+                    <Tag style={{ width: 9, height: 9 }} />{t}
                   </span>
                 ))}
               </div>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {entry.sentToDoctor && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1">
-              <CheckCircle className="w-3 h-3" /> Sent
+            <span style={{ fontSize: 10, color: '#10b981', display: 'flex', alignItems: 'center', gap: 3 }}>
+              <CheckCircle style={{ width: 11, height: 11 }} /> Sent
             </span>
           )}
-          <button onClick={() => setExpanded(!expanded)}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all">
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}
+          >
+            {expanded
+              ? <ChevronUp style={{ width: 15, height: 15 }} />
+              : <ChevronDown style={{ width: 15, height: 15 }} />
+            }
           </button>
-          <button onClick={() => onDelete(entry.id)}
-            className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all">
-            <Trash2 className="w-3.5 h-3.5" />
+          <button
+            onClick={() => onDelete(entry.id)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}
+          >
+            <Trash2 style={{ width: 13, height: 13 }} />
           </button>
         </div>
       </div>
 
       {expanded && (
-        <div className="mt-3 space-y-3 animate-fade-in">
-          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+        <div className="animate-fade-in" style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            {entry.content}
+          </p>
 
-          {/* AI Summary */}
+          {/* AI CBT Summary */}
           {entry.aiSummary ? (
-            <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-xs font-medium text-violet-300">AI Summary</span>
+            <div style={{
+              padding: '12px 14px', borderRadius: 12,
+              background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Brain style={{ width: 13, height: 13, color: '#a78bfa' }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa' }}>CBT Analysis</span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">{entry.aiSummary}</p>
+              <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>{entry.aiSummary}</p>
             </div>
           ) : (
             <button
               onClick={() => onSummarise(entry.id)}
               disabled={summarising}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 text-xs font-medium transition-all disabled:opacity-50"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 12px', borderRadius: 10,
+                background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)',
+                color: '#a78bfa', fontSize: 12, fontWeight: 500,
+                cursor: summarising ? 'wait' : 'pointer', opacity: summarising ? 0.6 : 1,
+              }}
             >
-              <Sparkles className="w-3 h-3" />
-              {summarising ? 'Summarising…' : 'Summarise with AI'}
+              <Sparkles style={{ width: 12, height: 12 }} />
+              {summarising ? 'Analysing with CBT framework…' : 'Analyse with AI (CBT)'}
             </button>
           )}
 
-          {/* Send to doctor */}
           {entry.aiSummary && !entry.sentToDoctor && (
             <button
               onClick={() => onSendToDoctor(entry.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition-all"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 12px', borderRadius: 10,
+                background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)',
+                color: '#10b981', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              }}
             >
-              <Send className="w-3 h-3" />
+              <Send style={{ width: 12, height: 12 }} />
               Send to Psychiatrist
             </button>
           )}
@@ -110,18 +187,57 @@ const JournalCard: React.FC<{
   );
 };
 
+// ── Main Journal component ────────────────────────────────────────────────────
 export const Journal: React.FC = () => {
   const { journals, addJournal, updateJournal, deleteJournal } = useAppContext();
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew]     = useState(false);
   const [summarising, setSummarising] = useState<string | null>(null);
 
-  // New entry form
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [mood, setMood] = useState(6);
-  const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
+  // New entry state
+  const [title, setTitle]         = useState('');
+  const [content, setContent]     = useState('');
+  const [mood, setMood]           = useState(6);
+  const [tagInput, setTagInput]   = useState('');
+  const [tags, setTags]           = useState<string[]>([]);
+  const [saving, setSaving]       = useState(false);
+
+  // Auto-analysis state
+  const [autoAnalysis, setAutoAnalysis]   = useState<string | null>(null);
+  const [analysing, setAnalysing]         = useState(false);
+  const [typingSignalDisplay, setTypingSignalDisplay] = useState<{ wpm: number; backspaceRate: number } | null>(null);
+  const autoAnalysisTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { onKeyDown: trackKeyDown, getSignals, reset: resetSignals } = useJournalTypingSignals();
+
+  // Auto-analyse after user stops typing for 3 seconds (min 80 chars)
+  const scheduleAutoAnalysis = useCallback(() => {
+    if (autoAnalysisTimer.current) clearTimeout(autoAnalysisTimer.current);
+    autoAnalysisTimer.current = setTimeout(async () => {
+      if (content.length < 80) return;
+      const signals = getSignals();
+      setTypingSignalDisplay({ wpm: signals.wpm, backspaceRate: signals.backspaceRate });
+      setAnalysing(true);
+      try {
+        const result = await autoAnalyseJournalEntry(
+          content, mood, signals.wpm, signals.backspaceRate, signals.avgPause
+        );
+        if (result) setAutoAnalysis(result);
+        else setAutoAnalysis(FALLBACK_SUMMARIES[Math.floor(Math.random() * FALLBACK_SUMMARIES.length)]);
+      } catch {
+        setAutoAnalysis(FALLBACK_SUMMARIES[0]);
+      }
+      setAnalysing(false);
+    }, 3000);
+  }, [content, mood, getSignals]);
+
+  useEffect(() => {
+    if (content.length >= 80) scheduleAutoAnalysis();
+    return () => { if (autoAnalysisTimer.current) clearTimeout(autoAnalysisTimer.current); };
+  }, [content, scheduleAutoAnalysis]);
+
+  const handleContentKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    trackKeyDown(e);
+  }, [trackKeyDown]);
 
   const handleAddTag = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && tagInput.trim()) {
@@ -134,8 +250,14 @@ export const Journal: React.FC = () => {
   const handleSave = async () => {
     if (!title.trim() || !content.trim()) return;
     setSaving(true);
-    addJournal({ title, content, mood, tags, sentToDoctor: false });
+    addJournal({
+      title, content, mood, tags,
+      sentToDoctor: false,
+      aiSummary: autoAnalysis || undefined,
+    });
     setTitle(''); setContent(''); setMood(6); setTags([]); setTagInput('');
+    setAutoAnalysis(null); setTypingSignalDisplay(null);
+    resetSignals();
     setShowNew(false);
     setSaving(false);
   };
@@ -146,37 +268,42 @@ export const Journal: React.FC = () => {
     setSummarising(id);
     try {
       const summary = await summariseJournal(entry.content, entry.mood);
-      const fallback = FALLBACK_SUMMARIES[Math.floor(Math.random() * FALLBACK_SUMMARIES.length)];
-      updateJournal(id, { aiSummary: summary || fallback });
+      updateJournal(id, { aiSummary: summary || FALLBACK_SUMMARIES[Math.floor(Math.random() * FALLBACK_SUMMARIES.length)] });
     } catch {
       updateJournal(id, { aiSummary: FALLBACK_SUMMARIES[0] });
     }
     setSummarising(null);
   };
 
-  const handleSendToDoctor = (id: string) => {
-    updateJournal(id, { sentToDoctor: true });
-  };
+  const moodColor = MOOD_COLORS[mood];
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="animate-fade-in">
+
       {/* Header */}
-      <div className="glass rounded-2xl p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-violet-400" />
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <BookOpen style={{ width: 18, height: 18, color: 'var(--accent)' }} />
             </div>
             <div>
-              <h2 className="font-semibold text-slate-100">Journal</h2>
-              <p className="text-xs text-slate-400">{journals.length} entries · AI-powered insights</p>
+              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>Journal</p>
+              <p style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                {journals.length} entries · Auto CBT analysis as you write
+              </p>
             </div>
           </div>
           <button
-            onClick={() => setShowNew(!showNew)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600/80 hover:bg-violet-600 text-white text-sm font-medium transition-all hover:scale-105"
+            onClick={() => { setShowNew(!showNew); setAutoAnalysis(null); }}
+            className="btn-primary"
+            style={{ gap: 6, fontSize: 13, padding: '8px 14px' }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus style={{ width: 14, height: 14 }} />
             New Entry
           </button>
         </div>
@@ -184,46 +311,114 @@ export const Journal: React.FC = () => {
 
       {/* New entry form */}
       {showNew && (
-        <div className="glass rounded-2xl p-5 animate-fade-in">
-          <h3 className="font-medium text-slate-200 mb-4">New Journal Entry</h3>
-          <div className="space-y-3">
+        <div className="animate-fade-in" style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 16, padding: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>New Entry</p>
+            <button onClick={() => setShowNew(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
+              <X style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Title */}
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="Entry title…"
-              className="w-full bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/50 transition-colors"
+              className="input"
+              style={{ fontSize: 14 }}
             />
 
-            {/* Mood picker */}
+            {/* Mood slider */}
             <div>
-              <label className="text-xs text-slate-400 mb-2 block">Current Mood: {MOOD_EMOJIS[mood]} {mood}/10</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                  Mood: {MOOD_EMOJIS[mood]} <span style={{ color: moodColor, fontWeight: 600 }}>{mood}/10</span>
+                </label>
+                {typingSignalDisplay && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: 'var(--text-3)' }}>
+                    <Activity style={{ width: 10, height: 10, display: 'inline' }} />
+                    {typingSignalDisplay.wpm} WPM · {typingSignalDisplay.backspaceRate.toFixed(0)}% corrections
+                  </div>
+                )}
+              </div>
               <input
                 type="range" min="1" max="10" step="1" value={mood}
                 onChange={e => setMood(Number(e.target.value))}
-                className="mood-slider w-full h-2 rounded-full appearance-none cursor-pointer"
+                className="mood-slider"
                 style={{
-                  background: `linear-gradient(to right, ${MOOD_COLORS[mood]} 0%, ${MOOD_COLORS[mood]} ${(mood - 1) / 9 * 100}%, rgba(255,255,255,0.1) ${(mood - 1) / 9 * 100}%, rgba(255,255,255,0.1) 100%)`,
+                  width: '100%', height: 6,
+                  background: `linear-gradient(to right, ${moodColor} 0%, ${moodColor} ${(mood - 1) / 9 * 100}%, var(--border-2) ${(mood - 1) / 9 * 100}%, var(--border-2) 100%)`,
                 }}
               />
             </div>
 
-            <textarea
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              placeholder="Write freely… this is your safe space. What's on your mind today?"
-              rows={5}
-              className="w-full bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-violet-500/50 resize-none transition-colors leading-relaxed"
-            />
+            {/* Content — typing is tracked here */}
+            <div style={{ position: 'relative' }}>
+              <textarea
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                onKeyDown={handleContentKeyDown}
+                placeholder="Write freely… this is your safe space. The AI will automatically analyse your entry as you write."
+                rows={6}
+                className="input"
+                style={{ fontSize: 13, lineHeight: 1.7, paddingBottom: 32 }}
+              />
+              {/* Live char count + auto-analysis indicator */}
+              <div style={{
+                position: 'absolute', bottom: 10, right: 12,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                {content.length >= 80 && analysing && (
+                  <span style={{ fontSize: 10, color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <Sparkles style={{ width: 9, height: 9, animation: 'spin-slow 2s linear infinite' }} />
+                    AI analysing…
+                  </span>
+                )}
+                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{content.length} chars</span>
+              </div>
+            </div>
+
+            {/* Auto-analysis result — appears while writing */}
+            {autoAnalysis && (
+              <div className="animate-fade-in" style={{
+                padding: '12px 14px', borderRadius: 12,
+                background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <Brain style={{ width: 12, height: 12, color: '#a78bfa' }} />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa' }}>Live CBT Analysis</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                    Updates as you write
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>{autoAnalysis}</p>
+              </div>
+            )}
 
             {/* Tags */}
             <div>
-              <label className="text-xs text-slate-400 mb-1.5 block">Tags (press Enter to add)</label>
-              <div className="flex flex-wrap gap-1.5 mb-2">
+              <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>
+                Tags <span style={{ color: 'var(--text-3)' }}>(press Enter)</span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {tags.map(t => (
-                  <span key={t} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/25 text-violet-300">
+                  <span key={t} style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    fontSize: 11, padding: '3px 10px', borderRadius: 99,
+                    background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+                    color: 'var(--accent)',
+                  }}>
                     {t}
-                    <button onClick={() => setTags(prev => prev.filter(x => x !== t))} className="text-violet-400 hover:text-red-400">×</button>
+                    <button onClick={() => setTags(prev => prev.filter(x => x !== t))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12, lineHeight: 1 }}>
+                      ×
+                    </button>
                   </span>
                 ))}
               </div>
@@ -233,21 +428,25 @@ export const Journal: React.FC = () => {
                 onChange={e => setTagInput(e.target.value)}
                 onKeyDown={handleAddTag}
                 placeholder="e.g. work, anxiety, sleep…"
-                className="w-full bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-violet-500/50 transition-colors"
+                className="input"
+                style={{ fontSize: 13 }}
               />
             </div>
 
-            <div className="flex gap-2 pt-1">
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={handleSave}
                 disabled={!title.trim() || !content.trim() || saving}
-                className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm font-medium transition-all"
+                className="btn-primary"
+                style={{ flex: 1, justifyContent: 'center', fontSize: 13 }}
               >
                 {saving ? 'Saving…' : 'Save Entry'}
               </button>
               <button
                 onClick={() => setShowNew(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-sm transition-all"
+                className="btn-ghost"
+                style={{ fontSize: 13 }}
               >
                 Cancel
               </button>
@@ -256,46 +455,32 @@ export const Journal: React.FC = () => {
         </div>
       )}
 
-      {/* Entries */}
+      {/* Entries list */}
       {journals.length === 0 ? (
-        <div className="glass rounded-2xl p-8 text-center">
-          <BookOpen className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">No journal entries yet.</p>
-          <p className="text-slate-500 text-xs mt-1">Start writing to track your mental journey.</p>
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 16, padding: 40, textAlign: 'center',
+        }}>
+          <BookOpen style={{ width: 32, height: 32, color: 'var(--text-3)', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 4 }}>No journal entries yet.</p>
+          <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
+            Start writing — AI will automatically analyse your entry using CBT principles as you type.
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {journals.map(entry => (
             <JournalCard
               key={entry.id}
               entry={entry}
               onSummarise={handleSummarise}
-              onSendToDoctor={handleSendToDoctor}
+              onSendToDoctor={id => updateJournal(id, { sentToDoctor: true })}
               onDelete={deleteJournal}
               summarising={summarising === entry.id}
             />
           ))}
         </div>
       )}
-
-      <style>{`
-        .mood-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 20px; height: 20px;
-          border-radius: 50%;
-          background: white;
-          box-shadow: 0 0 0 3px rgba(139,92,246,0.4), 0 2px 6px rgba(0,0,0,0.4);
-          cursor: pointer;
-        }
-        .mood-slider::-moz-range-thumb {
-          width: 20px; height: 20px;
-          border-radius: 50%;
-          background: white;
-          border: none;
-          box-shadow: 0 0 0 3px rgba(139,92,246,0.4);
-          cursor: pointer;
-        }
-      `}</style>
     </div>
   );
 };

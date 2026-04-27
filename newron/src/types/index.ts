@@ -38,7 +38,7 @@ export interface ChatMessage {
   role: 'user' | 'ai';
   content: string;
   timestamp: Date;
-  mode?: 'vent' | 'guidance';
+  mode?: 'vent' | 'guidance' | 'mood-assessment';
 }
 
 export interface BehavioralSignal {
